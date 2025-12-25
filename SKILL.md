@@ -2,7 +2,7 @@
 name: python-package-publishing
 description: Streamlined workflow for packaging and distributing Python projects using UV. Use this skill when initializing new libraries, configuring CLI entry points in pyproject.toml, or building and uploading artifacts to PyPI/TestPyPI. Ideal for converting local scripts into installable tools or setting up MCP servers for distribution.
 
-keywords: ["uv build", "pypi publishing", "pyproject.toml", "python packaging", "testpypi"]
+keywords: ["uv build", "pypi publishing", "pyproject.toml", "python packaging", "testpypi", "uv init", "uv publish"]
 ---
 
 # Python Package Publishing with UV
@@ -29,7 +29,7 @@ uv --version  # Verify UV is installed
 
 **Check Python Version:**
 ````bash
-python --version  # Ensure >= 3.10 for modern packaging
+python --version  # Ensure >= 3.11 for modern packaging
 ````
 
 **Identify Project Type:**
@@ -43,20 +43,48 @@ python --version  # Ensure >= 3.10 for modern packaging
 
 | Condition | Recommended Approach |
 |-----------|---------------------|
-| New project from scratch | Use `uv init --package` |
+| New project from scratch | Use `uv init` |
 | Existing codebase | Manual setup with `pyproject.toml` |
 | Simple library | Flat layout in project root |
 | Complex project | `src/` layout (modern standard) |
-| MCP server | Include entry points for CLI commands |
+| Monorepo / Workspace | Use `[tool.uv.workspace]` |
 
 ### Recommended Default: UV Init for New Projects
 
-For new projects, use `uv init --package <name>` which automatically creates:
+For new projects, use `uv init <name>` which automatically creates:
 - ✅ `pyproject.toml` with proper configuration
 - ✅ `src/` layout following modern standards
 - ✅ `__init__.py` for package structure
 - ✅ `.python-version` for version pinning
 - ✅ `README.md` and `.gitignore`
+
+(Note: The `--package` flag is deprecated; `uv init` now creates a package structure by default.)
+
+### The Correct Mental Model: Dependencies & Architecture
+
+When dealing with multiple related packages (e.g., `ecu-controller` depending on `serial-manager`), choose your architecture based on coupling:
+
+**Scenario A: Independent Packages**
+If `serial-manager` is a standalone library used by other projects:
+1. Create `serial-manager` separately (`uv init serial-manager`).
+2. Create `ecu-controller` separately.
+3. In `ecu-controller/pyproject.toml`, add dependency: `dependencies = ["serial-manager"]`.
+4. Development install:
+   ```bash
+   uv pip install -e /path/to/serial-manager
+   uv pip install -e /path/to/ecu-controller
+   ```
+
+**Scenario B: Monorepo (Tightly Coupled)**
+If they are always developed together, use a Workspace:
+```
+my-project/
+├── pyproject.toml (Workspace Root)
+└── packages/
+    ├── serial-manager/
+    └── ecu-controller/
+```
+(See "Working with Monorepos" section below for setup details).
 
 ## Project Structure Requirements
 
@@ -64,6 +92,8 @@ For new projects, use `uv init --package <name>` which automatically creates:
 ````
 project_root/
 ├── pyproject.toml          # Package configuration
+├── uv.lock                 # Locked dependencies (auto-generated)
+├── .python-version         # Python version pin
 ├── README.md               # Package documentation
 ├── LICENSE                 # License file
 └── src/
@@ -72,6 +102,22 @@ project_root/
         ├── __main__.py     # Module execution entry (optional)
         └── module.py       # Implementation
 ````
+
+### Adding Dependencies (Modern Workflow)
+
+Instead of manually editing `pyproject.toml`, use `uv add`:
+
+```bash
+# Add runtime dependency
+uv add requests numpy
+
+# Add dev dependency
+uv add --dev pytest black
+
+# Add optional dependency group
+uv add --optional docs sphinx
+```
+This automatically updates both `pyproject.toml` and `uv.lock`.
 
 ### Critical Files Explained
 
@@ -85,7 +131,7 @@ version = "0.1.0"
 description = "Brief description"
 authors = [{name = "Your Name", email = "email@example.com"}]
 readme = {file = "README.md", content-type = "text/markdown"}
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "dependency>=1.0.0",
 ]
@@ -115,12 +161,6 @@ my-command = "package_name.module:main"
   - Finds `module.py` file
   - Calls the `main()` function
 
-**Important Naming Convention:**
-- **Package name** (in `[project]`): Can use underscores (`my_package`)
-- **Command name** (in `[project.scripts]`): Often uses hyphens (`my-command`)
-- PyPI normalizes names, so `my_package` becomes `my-package` on PyPI
-- The command you run is whatever you specify in `[project.scripts]`
-
 #### 2. `src/package_name/__init__.py` - Package Definition
 
 **Purpose:** Makes the directory a Python package and defines public API.
@@ -137,12 +177,6 @@ __all__ = ["main"]
 #### 3. `src/package_name/__main__.py` - Module Execution
 
 **Purpose:** Allows running package with `python -m package_name`.
-
-**Do You Need This?**
-- ⚠️ Optional but recommended
-- ✅ Enables `python -m package_name` syntax
-- ✅ Useful during development
-- ✅ Standard Python convention
 ````python
 """Entry point for module execution."""
 
@@ -179,7 +213,6 @@ classifiers = [
     "Topic :: Software Development",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
 
@@ -234,6 +267,8 @@ uv build
 - `package_name-0.1.0-py3-none-any.whl` (Built package/wheel)
 - `package_name-0.1.0.tar.gz` (Source distribution)
 
+**Note:** UV automatically installs build dependencies (like hatchling) if needed.
+
 ### Step 2: Verify Build Contents
 ````bash
 # List wheel contents
@@ -246,26 +281,42 @@ unzip -l dist/package_name-0.1.0-py3-none-any.whl
 
 ## Publishing Workflow
 
-### Step 1: Create PyPI Accounts
+### Step 1: Create PyPI Accounts & Tokens
 
 1. **TestPyPI account:** https://test.pypi.org/account/register/
 2. **Real PyPI account:** https://pypi.org/account/register/
 3. Enable 2FA on both accounts (required)
 4. Generate API tokens for both
 
-**Important:** TestPyPI and PyPI are completely separate:
-- Different accounts
-- Different tokens
-- Different package indexes
+### Step 2: Authentication Options
 
-### Step 2: Publish to TestPyPI First
+**Option 1: Inline token (one-time)**
+```bash
+uv publish --token "pypi-..."
+```
+
+**Option 2: Environment variable (recommended for CI/CD)**
+```bash
+export UV_PUBLISH_TOKEN="pypi-..."
+uv publish
+```
+
+**Option 3: Keyring (for local development)**
+UV can use system keyring to store tokens securely.
+
+### Step 3: Publish to TestPyPI First
 
 **Always test on TestPyPI before publishing to real PyPI.**
-````bash
-uv publish --publish-url https://test.pypi.org/legacy/ --token "pypi-your-testpypi-token"
-````
 
-### Step 3: Test Installation from TestPyPI
+```bash
+# Full URL
+uv publish --publish-url https://test.pypi.org/legacy/ --token "pypi-..."
+
+# Or use --test flag (if available in your uv version)
+uv publish --test --token "pypi-..."
+```
+
+### Step 4: Test Installation from TestPyPI
 
 **Important Limitation:** TestPyPI doesn't have access to packages on real PyPI. If your package has dependencies that only exist on PyPI, you need both indexes:
 ````bash
@@ -283,14 +334,14 @@ uvx --index-url https://test.pypi.org/simple/ \
     package-name
 ````
 
-### Step 4: Publish to Real PyPI
+### Step 5: Publish to Real PyPI
 
 Once TestPyPI verification is complete:
 ````bash
 uv publish --token "pypi-your-real-pypi-token"
 ````
 
-### Step 5: Verify on PyPI
+### Step 6: Verify on PyPI
 
 1. Visit `https://pypi.org/project/package-name/`
 2. Check metadata displays correctly
@@ -304,7 +355,7 @@ pip install package-name
 uvx package-name
 ````
 
-### Step 6: Update MCP Client Configuration
+### Step 7: Update MCP Client Configuration
 
 After publishing to PyPI, users can use the simple configuration:
 ````json
@@ -327,6 +378,42 @@ After publishing to PyPI, users can use the simple configuration:
 | `python -m` | Manual control | `"command": "python", "args": ["-m", "package_name"]` |
 | Direct command | After pip install | `"command": "my-command"` |
 
+## Reproducible Development Setup
+
+Ensure everyone on the team has the exact same environment:
+
+```bash
+# Install exact versions from uv.lock
+uv sync
+
+# Install with dev dependencies
+uv sync --extra dev
+
+# Update dependencies
+uv sync --upgrade
+```
+
+## Working with Monorepos (Workspaces)
+
+For projects with multiple packages (e.g. `serial-manager` + `ecu-controller`):
+
+```toml
+# Root pyproject.toml
+[tool.uv.workspace]
+members = ["packages/*"]
+
+# Directory structure:
+# project/
+# ├── pyproject.toml
+# └── packages/
+#     ├── serial-manager/
+#     │   └── pyproject.toml
+#     └── ecu-controller/
+#         └── pyproject.toml
+```
+
+**Build all packages:** `uv build --all`
+
 ## Future Updates and Version Management
 
 ### Releasing a New Version
@@ -338,7 +425,7 @@ After publishing to PyPI, users can use the simple configuration:
 # 2. Clean old build
 rm -rf dist/ 
 
-# 32. Build the new version
+# 3. Build the new version
 uv build
 
 # 4. Publish to PyPI
@@ -347,8 +434,6 @@ uv publish --token "your-pypi-token"
 # 5. Create and push Git tag
 git tag v0.2.0
 git push origin v0.2.0
-
-# 6. Create GitHub release (optional but recommended)
 ````
 
 ### Semantic Versioning
@@ -360,7 +445,20 @@ Follow semantic versioning (semver):
 
 ## Common Pitfalls and Solutions
 
-### 1. Import Errors After Installation
+### 1. UV Cache Issues
+
+**Symptom:** Old versions being used despite updates or weird build artifacts.
+
+**Solution:**
+```bash
+# Clear UV cache
+uv cache clean
+
+# Rebuild with fresh cache
+uv build
+```
+
+### 2. Import Errors After Installation
 
 **Symptom:** `ModuleNotFoundError` when importing
 
@@ -378,7 +476,7 @@ from .module import function
 from package_name.module import function
 ````
 
-### 2. Entry Point Not Working
+### 3. Entry Point Not Working
 
 **Symptom:** Command not found after installation
 
@@ -393,7 +491,7 @@ from package_name.module import function
 my-command = "package_name.server:main"  # Must have main() in server.py
 ````
 
-### 3. Package Name vs. Command Name Confusion
+### 4. Package Name vs. Command Name Confusion
 
 **Symptom:** `uvx package_name` fails but `uvx package-name` works
 
@@ -410,51 +508,15 @@ my-command = "my_package.module:main"  # Command users run
 - Run with: `my-command` (from [project.scripts])
 - **Not with:** `my_package` (that's the Python module name)
 
-### 4. TestPyPI Dependency Issues
-
-**Symptom:** Cannot install from TestPyPI due to missing dependencies
-
-**Cause:** Dependencies only exist on real PyPI, not TestPyPI
-
-**Solution:** Use both indexes:
-````bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            package-name
-````
-
-**Note:** This is expected - TestPyPI is for testing the publishing process, not full dependency resolution.
-
 ### 5. Authentication Failures
 
 **Symptom:** `403 Forbidden` or `Invalid authentication`
-
-**Common Causes:**
-- Using username/password instead of token
-- Token from wrong service (TestPyPI token for PyPI)
-- Token not copied completely
 
 **Solution:**
 ````bash
 # Username is always __token__ (literally)
 # Password is your API token starting with pypi-
 uv publish --token "pypi-AgEIcHlwaS5vcmcCJG..."
-````
-
-### 6. `__main__.py` Not Needed But Causes Confusion
-
-**When It Matters:**
-- ✅ Needed for `python -m package_name` to work
-- ❌ Not needed if only using entry point commands
-- ✅ Best practice to include anyway
-
-**Structure:**
-````python
-# __main__.py
-from package_name.module import main
-
-if __name__ == "__main__":
-    main()
 ````
 
 ## Verification Strategy
@@ -467,6 +529,7 @@ if __name__ == "__main__":
 - [ ] Local testing works: `uv run my-command`
 - [ ] Imports work: `uv run python -c "import package_name"`
 - [ ] README.md is complete and properly formatted
+- [ ] `uv sync` run for reproducible environment
 
 ### Pre-Publish Checklist
 
@@ -548,20 +611,6 @@ pip install package-name
 my-command
 ````
 
-### Method 4: Development Installation
-
-**For contributors and developers:**
-````bash
-# Clone repository
-git clone https://github.com/user/project.git
-cd project
-
-# Install in editable mode
-pip install -e .
-
-# Changes to code are immediately reflected
-````
-
 ## Documentation Best Practices
 
 ### README Structure
@@ -615,11 +664,13 @@ For Claude Desktop, add to `claude_desktop_config.json`:
 ## Summary Checklist
 
 **Initial Setup:**
-- [ ] Project structure with src/ layout
-- [ ] pyproject.toml configured
-- [ ] Entry points defined
-- [ ] __init__.py files in place
-- [ ] main() function exists
+- [ ] `pyproject.toml` has correct name, version, and entry points
+- [ ] All `__init__.py` files exist
+- [ ] `main()` function exists in entry point target
+- [ ] Local testing works: `uv run my-command`
+- [ ] Imports work: `uv run python -c "import package_name"`
+- [ ] README.md is complete and properly formatted
+- [ ] `uv sync` run for reproducible environment
 
 **Testing:**
 - [ ] Local testing with uv run
