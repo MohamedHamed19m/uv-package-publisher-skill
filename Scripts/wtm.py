@@ -245,7 +245,7 @@ def _remove_worktrees(targets, delete_branches, show_progress=True):
             task = progress.add_task("Removing worktrees...", total=len(targets))
 
         for target in targets:
-            if run_git(["worktree", "remove", target["path"]]) is not None:
+            if run_git(["worktree", "remove", "--force", target["path"]]) is not None:
                 console.print(f"  [green]✓[/green] Removed: {target['path']}")
                 if delete_branches and target["branch"] != "N/A":
                     run_git(["branch", "-D", target["branch"]])
@@ -403,10 +403,10 @@ def show_menu():
     menu.add_column("Description", style="white")
     menu.add_row("1", "📋 List Worktrees")
     menu.add_row("2", "➕ Create New Worktree")
-    menu.add_row("3", "🔀 Merge Worktree into Current") # New Option
-    menu.add_row("4", "🗑️  Remove Worktree")
+    menu.add_row("3, m", "🔀 Merge Worktree into Current") # New Option
+    menu.add_row("4, r", "🗑️  Remove Worktree")
     menu.add_row("5", "💻 Open Worktree in VS Code")
-    menu.add_row("6", "🚪 Exit")
+    menu.add_row("6, q", "🚪 Exit")
     console.print(
         Panel(menu, title="[bold]Git Worktree Manager[/bold]", border_style="blue")
     )
@@ -422,7 +422,7 @@ def main():
         try:
             choice = Prompt.ask(
                 "\n[bold]Select an option[/bold]",
-                choices=["1", "2", "3", "4", "5", "6"],
+                choices=["1", "2", "3", "4", "5", "6", "m", "r", "q"],
                 show_choices=False,
             )
 
@@ -430,13 +430,13 @@ def main():
                 list_worktrees()
             elif choice == "2":
                 create_worktree()
-            elif choice == "3":
+            elif choice == "3" or choice == "m":
                 merge_worktree() # New handler
-            elif choice == "4":
+            elif choice == "4" or choice == "r":
                 remove_worktree()
             elif choice == "5":
                 open_in_editor()
-            elif choice == "6":
+            elif choice == "6" or choice == "q":
                 console.print("\n[cyan]👋 Goodbye![/cyan]")
                 break
         except KeyboardInterrupt:
