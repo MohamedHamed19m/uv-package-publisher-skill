@@ -22,5 +22,4 @@ prompt = """
 - Use 'repositoryTopics' for viewing.
 - Use '--add-topic' for topics.
 - Use '--homepage' for the website URL.
-- Do not mention "Virtual HIL" or "Testing" unless those are actually found in the current repo.
 """
