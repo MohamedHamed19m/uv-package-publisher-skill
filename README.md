@@ -1,34 +1,38 @@
-# Python Release & Development Skills Collection
+# Coding Dev Toolkit
 
-A comprehensive collection of AI skills for managing Python package releases, versioning, automation, and best practices. Designed for use with Claude, Gemini, and other AI platforms.
-
-**What are these skills?** Structured guides that teach AI models how to help you with specific workflows. Copy any skill into your Claude/Gemini context and ask for help with that task.
+A personal collection of AI skills, custom commands, scripts, and utilities to accelerate development workflows.
 
 ---
 
-## 📚 Available Skills
+## Contents
 
-### 1. Python Package Release Workflow
-**File**: [`Skills_Folder/python-package-release-workflow.md`](skills/python-package-release-workflow.md)
+### Skills (`Skills_Folder/`)
+Structured AI guides for specific workflows:
+- `Python-release-workflow` - PyPI release automation
+- `mcp-builder` - MCP server development
+- `capl_someip_areth` - Automotive protocols
 
-Complete workflow for releasing Python packages to PyPI with automated testing, documentation, and versioning.
+### Commands (`commands/`)
+Claude Code custom commands (`.toml`):
+| Command | Purpose |
+|---------|---------|
+| `plan` / `plan-tasks` | Task planning |
+| `Code-Simplifier` | Code refactoring |
+| `issue` | Debugging loops |
+| `create` | Extension scaffolding |
+| `gh-seo` | GitHub SEO optimization |
+
+### Scripts (`Scripts/`)
+Standalone Python utilities:
+- `wtm.py` - Git worktree manager
+- `discover.py` - AI context discovery from markdown front matter
+- `merge_files.py` - Combine files by extension into one output
+
+### Docs (`docs/`)
+Documentation with YAML front matter for AI discoverability.
+
 ---
 
+## Usage
 
-
-## 📖 Skill Structure
-
-Each skill contains:
-
-- **📋 Core Concepts** – Essential knowledge
-- **🚀 Workflows** – Step-by-step processes
-- **⚙️ Configuration Files** – Copy/paste ready templates
-- **🔗 Linking** – How to connect services (PyPI, GitHub Pages, etc.)
-- **⚠️ Setup Requirements** – One-time configurations
-- **✅ Checklists** – Before you proceed
-- **📊 Commands** – Ready-to-run bash commands
-- **🐛 Troubleshooting** – Common errors and fixes
-- **🎯 Comparison** – Pros/cons of different approaches
-- **🤖 How to Use** – Instructions for AI interaction
-
- 
+Each item is designed to be **standalone** - copy what you need to any project.
