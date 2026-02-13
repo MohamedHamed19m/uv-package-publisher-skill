@@ -15,25 +15,32 @@ Usage:
     uv run discover.py --ai               # AI-optimized format
     uv run discover.py --dirs docs,src    # Custom directories
 """
-
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Annotated
+
 import typer
 import yaml
 
 app = typer.Typer(
     name="discover",
-    help="Discover project documentation with front matter metadata",
+    help="Scan project documentation with front matter metadata.",
     add_completion=False,
 )
 
 
+# =========================================================
+# Front matter extraction
+# =========================================================
 def extract_front_matter(md_file: Path) -> Optional[Dict[str, Any]]:
-    """Efficiently extract YAML front matter without reading the whole file."""
-    lines = []
+    """
+    Efficiently extract YAML front matter without reading the whole file.
+    """
+    lines: List[str] = []
+
     try:
         with md_file.open("r", encoding="utf-8") as f:
             first_line = f.readline().strip()
+
             if first_line != "---":
                 return None
 
@@ -46,109 +53,137 @@ def extract_front_matter(md_file: Path) -> Optional[Dict[str, Any]]:
                 return None
 
         return yaml.safe_load("".join(lines))
+
     except Exception:
         return None
 
 
-def discover_docs(root_dir: Path, search_dirs: List[str]) -> List[Dict[str, Any]]:
-    """Scan directories for markdown files with front matter."""
-    docs = []
-    dirs_to_search = [root_dir / d for d in search_dirs]
+# =========================================================
+# Discovery
+# =========================================================
+def discover_docs(
+    root_dir: Path,
+    search_dirs: List[str],
+) -> List[Dict[str, Any]]:
+    """
+    Scan for markdown files and ONLY include those
+    with valid summary + read_when metadata.
+    """
 
-    for search_dir in dirs_to_search:
-        if not search_dir.exists():
+    docs: List[Dict[str, Any]] = []
+
+    NULL_VALUES = [None, "", "null", "n/a", "N/A", "none", "no summary"]
+    ALLOWED_KEYS = {"summary", "read_when"}
+
+    for d in search_dirs:
+        search_dir = root_dir / d
+
+        if not search_dir.exists() or not search_dir.is_dir():
             continue
 
         for md_file in search_dir.rglob("*.md"):
-            # Skip noise files
-            if any(
-                x in md_file.name.lower()
-                for x in ["changelog", "license", "contributing"]
-            ):
+
+            # skip non-documentation
+            if any(x in md_file.name.lower() for x in ["changelog", "license", "contributing"]):
                 continue
 
             front_matter = extract_front_matter(md_file)
+
             if not front_matter:
                 continue
 
-            # Normalize triggers to a list
+            # strict key validation
+            current_keys = set(front_matter.keys())
+            if current_keys != ALLOWED_KEYS:
+                continue
+
+            summary = front_matter.get("summary")
+
+            if summary is None or str(summary).lower().strip() in NULL_VALUES:
+                summary = "No Summary"
+
             read_when = front_matter.get("read_when", [])
+
             if isinstance(read_when, str):
                 read_when = [read_when]
+            elif read_when is None:
+                read_when = []
 
-            docs.append(
-                {
-                    "path": md_file.relative_to(root_dir).as_posix(),
-                    "summary": front_matter.get("summary", "No summary"),
-                    "read_when": read_when,
-                }
-            )
+            try:
+                rel_path = md_file.relative_to(root_dir).as_posix()
+
+                docs.append(
+                    {
+                        "path": rel_path,
+                        "summary": summary,
+                        "read_when": read_when,
+                    }
+                )
+            except ValueError:
+                continue
 
     return docs
 
 
+# =========================================================
+# Human readable output
+# =========================================================
 def print_list(docs: List[Dict[str, Any]], project_name: str) -> None:
-    """Print simple list format."""
+    """Print simple list format for humans."""
+
     if not docs:
-        typer.secho("No documentation with front matter found.", fg=typer.colors.YELLOW)
+        typer.echo("No documentation with valid front matter found.")
         return
 
     typer.secho("\n" + "=" * 70, fg=typer.colors.CYAN)
-    typer.secho(f"  {project_name.upper()} - DOCUMENTATION INDEX", bold=True, fg=typer.colors.CYAN)
-    typer.secho("=" * 70 + "\n", fg=typer.colors.CYAN)
+    typer.secho(f"{project_name.upper()} – DOCUMENTATION INDEX", bold=True, fg=typer.colors.CYAN)
+    typer.secho("=" * 70 + "\n")
 
     for doc in sorted(docs, key=lambda x: x["path"]):
         typer.secho(doc["path"], fg=typer.colors.GREEN, bold=True)
         typer.echo(f"  Summary: {doc['summary']}")
+
         read_when = ", ".join(doc["read_when"]) if doc["read_when"] else "N/A"
         typer.echo(f"  Trigger: {read_when}\n")
 
 
+# =========================================================
+# AI optimized output
+# =========================================================
 def print_ai_format(docs: List[Dict[str, Any]]) -> None:
-    """Print format for AI system prompts."""
+    """
+    Format for AI system prompts.
+    """
     if not docs:
         return
 
-    typer.echo("\n# PROJECT CONTEXT GUIDE")
-    typer.echo(
-        "Review this list. Read the full content of a file ONLY if the current task matches its 'Read when' trigger.\n"
-    )
+    typer.echo("\n### PROJECT CONTEXT GUIDE")
 
     for doc in sorted(docs, key=lambda x: x["path"]):
         typer.echo(f"FILE: {doc['path']}")
         typer.echo(f"DESC: {doc['summary']}")
+
         read_when = ", ".join(doc["read_when"]) if doc["read_when"] else "N/A"
         typer.echo(f"WHEN: {read_when}\n")
 
 
+# =========================================================
+# CLI
+# =========================================================
 @app.command()
 def main(
-    ai: bool = typer.Option(False, "--ai", help="Output in AI-optimized format"),
-    root: str = typer.Option(".", "--root", "-r", help="Root project directory"),
-    dirs: str = typer.Option(
-        "docs",
-        "--dirs",
-        "-d",
-        help="Comma-separated directories to scan (default: docs)",
-    ),
-    name: str = typer.Option(
-        "Project",
-        "--name",
-        "-n",
-        help="Project name for display header",
-    ),
+    ai: Annotated[bool, typer.Option("--ai", help="Output in AI-optimized format")] = False,
+    root: Annotated[str, typer.Option("--root", "-r", help="Root project directory")] = ".",
+    dirs: Annotated[str, typer.Option("--dirs", "-d", help="Comma separated directories")] = "docs",
+    name: Annotated[str, typer.Option("--name", "-n", help="Project display name")] = "Project",
 ) -> None:
     """
-    Discover project docs and generate context lists for AI or humans.
-
-    Examples:
-        discover.py                         # Scan docs/ folder
-        discover.py --ai                    # AI-optimized output
-        discover.py -d docs,src,memory      # Multiple directories
-        discover.py -n "MyApp"              # Custom project name
+    Discover project docs and generate context lists.
     """
-    root_dir = Path(root).resolve()
+
+    root_dir = Path(str(root)).resolve()
     search_dirs = [d.strip() for d in dirs.split(",")]
+
     docs = discover_docs(root_dir, search_dirs)
 
     if ai:
@@ -157,5 +192,6 @@ def main(
         print_list(docs, name)
 
 
+# =========================================================
 if __name__ == "__main__":
     app()
